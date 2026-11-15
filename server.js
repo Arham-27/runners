@@ -9,65 +9,78 @@ const io = new Server(server);
 
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Store players grouped by room
-const rooms = {};
+// Store players grouped by room, defaulting CHASE01
+const rooms = {
+    'CHASE01': {}
+};
 
 io.on('connection', (socket) => {
     console.log(`Player connected: ${socket.id}`);
 
-    // Default player state
+    // Automatically assign to default room CHASE01 on connection
+    const defaultRoom = 'CHASE01';
+    socket.join(defaultRoom);
+
     socket.data = {
         id: socket.id,
         name: `Player_${socket.id.substring(0, 4)}`,
-        room: 'CHASE01',
+        room: defaultRoom,
         role: 'runner',
         lat: 0,
         lon: 0,
         caught: false
     };
 
-    // Handle joining a specific room
+    if (!rooms[defaultRoom]) rooms[defaultRoom] = {};
+    rooms[defaultRoom][socket.id] = socket.data;
+
+    // Immediately broadcast player list so the sidebar populates instantly
+    io.to(defaultRoom).emit('updatePlayers', rooms[defaultRoom]);
+
+    // Handle explicit room switching if requested by UI
     socket.on('joinRoom', ({ room, name, role }) => {
-        if (room) {
-            socket.leave(socket.data.room);
-            socket.data.room = room.toUpperCase();
-            socket.join(socket.data.room);
-        }
+        const targetRoom = (room || defaultRoom).toUpperCase();
+        socket.leave(socket.data.room);
+        delete rooms[socket.data.room]?.[socket.id];
+
+        socket.data.room = targetRoom;
+        socket.join(targetRoom);
+
         if (name) socket.data.name = name;
         if (role) socket.data.role = role;
 
-        if (!rooms[socket.data.room]) {
-            rooms[socket.data.room] = {};
-        }
-        rooms[socket.data.room][socket.id] = socket.data;
+        if (!rooms[targetRoom]) rooms[targetRoom] = {};
+        rooms[targetRoom][socket.id] = socket.data;
 
-        // Broadcast updated players to everyone in this room
-        io.to(socket.data.room).emit('updatePlayers', rooms[socket.data.room]);
+        io.to(targetRoom).emit('updatePlayers', rooms[targetRoom]);
     });
 
     // Handle position updates
     socket.on('updatePosition', (data) => {
-        if (rooms[socket.data.room] && rooms[socket.data.room][socket.id]) {
-            rooms[socket.data.room][socket.id].lat = data.lat;
-            rooms[socket.data.room][socket.id].lon = data.lon;
-            if (data.name) rooms[socket.data.room][socket.id].name = data.name;
+        const room = socket.data.room;
+        if (rooms[room] && rooms[room][socket.id]) {
+            rooms[room][socket.id].lat = data.lat;
+            rooms[room][socket.id].lon = data.lon;
+            if (data.name) rooms[room][socket.id].name = data.name;
 
-            io.to(socket.data.room).emit('updatePlayers', rooms[socket.data.room]);
+            io.to(room).emit('updatePlayers', rooms[room]);
         }
     });
 
     // Handle role changes
     socket.on('setRole', (role) => {
-        if (rooms[socket.data.room] && rooms[socket.data.room][socket.id]) {
-            rooms[socket.data.room][socket.id].role = role;
-            io.to(socket.data.room).emit('updatePlayers', rooms[socket.data.room]);
+        const room = socket.data.room;
+        if (rooms[room] && rooms[room][socket.id]) {
+            rooms[room][socket.id].role = role;
+            io.to(room).emit('updatePlayers', rooms[room]);
         }
     });
 
     // Handle secure manual cheat ping (Passcode: CHASE2026)
     socket.on('requestCheatPing', ({ passcode }) => {
+        const room = socket.data.room;
         if (passcode === 'CHASE2026') {
-            io.to(socket.data.room).emit('globalPing', {
+            io.to(room).emit('globalPing', {
                 senderId: socket.id,
                 lat: socket.data.lat,
                 lon: socket.data.lon,
@@ -80,7 +93,8 @@ io.on('connection', (socket) => {
 
     // Handle Seeker catching a Runner
     socket.on('catchRunner', ({ runnerId }) => {
-        const roomPlayers = rooms[socket.data.room];
+        const room = socket.data.room;
+        const roomPlayers = rooms[room];
         if (!roomPlayers) return;
 
         const seeker = roomPlayers[socket.id];
@@ -89,22 +103,22 @@ io.on('connection', (socket) => {
         if (seeker && seeker.role === 'seeker' && runner && runner.role === 'runner' && !runner.caught) {
             runner.caught = true;
 
-            io.to(socket.data.room).emit('gameNotification', `${runner.name} has been caught!`);
-            io.to(socket.data.room).emit('updatePlayers', roomPlayers);
+            io.to(room).emit('gameNotification', `${runner.name} has been caught!`);
+            io.to(room).emit('updatePlayers', roomPlayers);
 
             // Check if any active runners are left in the room
             const activeRunners = Object.values(roomPlayers).filter(p => p.role === 'runner' && !p.caught);
 
             if (activeRunners.length === 0) {
-                io.to(socket.data.room).emit('gameOver', 'Game Over! All runners have been caught.');
+                io.to(room).emit('gameOver', 'Game Over! All runners have been caught.');
 
                 setTimeout(() => {
                     for (let id in roomPlayers) {
                         roomPlayers[id].caught = false;
                         roomPlayers[id].role = 'runner';
                     }
-                    io.to(socket.data.room).emit('returnToLobby');
-                    io.to(socket.data.room).emit('updatePlayers', roomPlayers);
+                    io.to(room).emit('returnToLobby');
+                    io.to(room).emit('updatePlayers', roomPlayers);
                 }, 3000);
             }
         }
@@ -113,10 +127,10 @@ io.on('connection', (socket) => {
     // Handle disconnection
     socket.on('disconnect', () => {
         console.log(`Player disconnected: ${socket.id}`);
-        const roomName = socket.data.room;
-        if (rooms[roomName] && rooms[roomName][socket.id]) {
-            delete rooms[roomName][socket.id];
-            io.to(roomName).emit('updatePlayers', rooms[roomName]);
+        const room = socket.data.room;
+        if (rooms[room] && rooms[room][socket.id]) {
+            delete rooms[room][socket.id];
+            io.to(room).emit('updatePlayers', rooms[room]);
         }
     });
 });
