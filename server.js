@@ -5,7 +5,7 @@ const path = require('path');
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server); // Initialized properly right here
+const io = new Server(server); // Initialized properly at the root level
 
 app.use(express.static(path.join(__dirname, 'public')));
 
@@ -33,10 +33,9 @@ io.on('connection', (socket) => {
     if (!rooms[defaultRoom]) rooms[defaultRoom] = {};
     rooms[defaultRoom][socket.id] = socket.data;
 
-    // Broadcast players as an ARRAY so frontend client loops work properly
+    // Broadcast player array so frontend client loops work properly
     io.to(defaultRoom).emit('updatePlayers', Object.values(rooms[defaultRoom]));
 
-    // Handle explicit room switching if requested by UI
     socket.on('joinRoom', ({ room, name, role }) => {
         const targetRoom = (room || defaultRoom).toUpperCase();
         socket.leave(socket.data.room);
@@ -56,7 +55,6 @@ io.on('connection', (socket) => {
         io.to(targetRoom).emit('updatePlayers', Object.values(rooms[targetRoom]));
     });
 
-    // Handle position updates
     socket.on('updatePosition', (data) => {
         const room = socket.data.room;
         if (rooms[room] && rooms[room][socket.id]) {
@@ -68,7 +66,6 @@ io.on('connection', (socket) => {
         }
     });
 
-    // Handle role changes
     socket.on('setRole', (role) => {
         const room = socket.data.room;
         if (rooms[room] && rooms[room][socket.id]) {
@@ -77,7 +74,6 @@ io.on('connection', (socket) => {
         }
     });
 
-    // Handle secure manual cheat ping with passcode validation (CHASE2026)
     socket.on('requestCheatPing', ({ passcode }) => {
         const room = socket.data.room;
         if (passcode === 'CHASE2026') {
@@ -92,7 +88,6 @@ io.on('connection', (socket) => {
         }
     });
 
-    // Handle Seeker catching a Runner
     socket.on('catchRunner', ({ runnerId }) => {
         const room = socket.data.room;
         const roomPlayers = rooms[room];
@@ -104,21 +99,18 @@ io.on('connection', (socket) => {
         if (seeker && seeker.role === 'seeker' && runner && runner.role === 'runner' && !runner.caught) {
             runner.caught = true;
 
-            // 1. Broadcast catch notification and updated player array
             io.to(room).emit('gameNotification', `${runner.name} has been caught!`);
             io.to(room).emit('updatePlayers', Object.values(roomPlayers));
 
-            // 2. Check if any active (uncaught) runners are left
             const activeRunners = Object.values(roomPlayers).filter(p => p.role === 'runner' && !p.caught);
 
             if (activeRunners.length === 0) {
-                // 3. Trigger Game Over and reset lobby after 3 seconds
                 io.to(room).emit('gameOver', 'Game Over! All runners have been caught.');
 
                 setTimeout(() => {
                     for (let id in roomPlayers) {
                         roomPlayers[id].caught = false;
-                        roomPlayers[id].role = 'runner'; // Reset state back to lobby
+                        roomPlayers[id].role = 'runner';
                     }
                     io.to(room).emit('returnToLobby');
                     io.to(room).emit('updatePlayers', Object.values(roomPlayers));
@@ -127,7 +119,6 @@ io.on('connection', (socket) => {
         }
     });
 
-    // Handle player disconnection
     socket.on('disconnect', () => {
         console.log(`Player disconnected: ${socket.id}`);
         const room = socket.data.room;
