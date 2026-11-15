@@ -1,7 +1,13 @@
 document.addEventListener('DOMContentLoaded', () => {
     console.log("ChronoChase script initialized.");
 
-    const socket = io();
+    // Safely connect socket
+    let socket;
+    try {
+        socket = io();
+    } catch (e) {
+        console.error("Socket.io error:", e);
+    }
 
     const lobbyScreen = document.getElementById('lobby-screen');
     const gameScreen = document.getElementById('game-screen');
@@ -36,26 +42,27 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (joinBtn) {
         joinBtn.addEventListener('click', () => {
-            console.log("Initialize button clicked!");
+            alert("Button Clicked!"); // Debug alert to verify click works
 
             const playerName = playerNameInput && playerNameInput.value.trim() ? playerNameInput.value.trim() : 'Agent';
             roomCode = roomCodeInput && roomCodeInput.value.trim() ? roomCodeInput.value.trim().toUpperCase() : 'CHASE01';
             myRole = playerRoleSelect ? playerRoleSelect.value : 'runner';
             const enteredCode = secretCodeInput ? secretCodeInput.value.trim() : '';
 
-            if (!roomCode) {
-                alert('Please enter a room code');
-                return;
-            }
-
             cheatUnlocked = (enteredCode === SECRET_CHEAT_PASSCODE);
 
-            // 1. Switch screens immediately so the UI responds instantly
-            if (lobbyScreen) lobbyScreen.classList.add('hidden');
-            if (gameScreen) gameScreen.classList.remove('hidden');
+            // 1. Force hide lobby and show game screen
+            if (lobbyScreen) {
+                lobbyScreen.style.display = 'none';
+                lobbyScreen.classList.add('hidden');
+            }
+            if (gameScreen) {
+                gameScreen.style.display = 'flex';
+                gameScreen.classList.remove('hidden');
+            }
             
             if (hudRoom) hudRoom.textContent = roomCode;
-            if (hudRole) hudRole.textContent = myRole.toUpperCase() + (cheatUnlocked ? ' [CHEAT UNLOCKED]' : '');
+            if (hudRole) hudRole.textContent = myRole.toUpperCase() + (cheatUnlocked ? ' [CHEAT]' : '');
 
             if (myRole === 'seeker') {
                 if (catchBtn) catchBtn.classList.remove('hidden');
@@ -64,18 +71,19 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (cheatPingBtn) cheatPingBtn.classList.remove('hidden');
             }
 
-            // 2. Emit socket join event
-            console.log(`Joining room ${roomCode} as ${myRole} with name ${playerName}, cheatUnlocked: ${cheatUnlocked}`);
-            socket.emit('join-room', { roomCode, playerName, role: myRole, cheatUnlocked });
+            // 2. Emit socket join if socket exists
+            if (socket) {
+                socket.emit('join-room', { roomCode, playerName, role: myRole, cheatUnlocked });
+            }
 
-            // 3. Initialize map after a short delay to ensure DOM dimensions are ready
+            // 3. Initialize map
             setTimeout(() => {
                 try {
                     initMap();
                 } catch (err) {
                     console.error("Map initialization error:", err);
                 }
-            }, 200);
+            }, 300);
         });
     }
 
@@ -98,7 +106,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         setTimeout(() => {
             map.invalidateSize();
-        }, 250);
+        }, 300);
 
         if (navigator.geolocation) {
             navigator.geolocation.watchPosition(
@@ -122,7 +130,9 @@ document.addEventListener('DOMContentLoaded', () => {
                         myMarker.setLatLng([lat, lng]);
                     }
 
-                    socket.emit('update-location', { roomCode, lat, lng });
+                    if (socket) {
+                        socket.emit('update-location', { roomCode, lat, lng });
+                    }
                 },
                 (error) => {
                     console.warn('Geolocation warning:', error.message);
@@ -132,127 +142,92 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    function playBeep() {
-        try {
-            const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-            const oscillator = audioCtx.createOscillator();
-            const gainNode = audioCtx.createGain();
-            
-            oscillator.type = 'sine';
-            oscillator.frequency.setValueAtTime(880, audioCtx.currentTime);
-            gainNode.gain.setValueAtTime(0.2, audioCtx.currentTime);
-            
-            oscillator.connect(gainNode);
-            gainNode.connect(audioCtx.destination);
-            
-            oscillator.start();
-            oscillator.stop(audioCtx.currentTime + 0.3);
-        } catch (e) {
-            console.log("Audio restricted:", e);
-        }
-    }
+    if (socket) {
+        socket.on('update-players', (players) => {
+            playersData = players;
+            if (runnersList) runnersList.innerHTML = '';
+            if (seekersList) seekersList.innerHTML = '';
 
-    socket.on('update-players', (players) => {
-        console.log("Players update received:", players);
-        playersData = players;
-        if (runnersList) runnersList.innerHTML = '';
-        if (seekersList) seekersList.innerHTML = '';
+            for (const id in players) {
+                const p = players[id];
+                const isMe = (id === socket.id);
+                const displayName = p.name.toUpperCase() + (isMe ? ' (You)' : '');
+                const color = p.role === 'runner' ? '#da3633' : '#238636';
 
-        for (const id in players) {
-            const p = players[id];
-            const isMe = (id === socket.id);
-            const displayName = p.name.toUpperCase() + (isMe ? ' (You)' : '');
-            
-            const color = p.role === 'runner' ? '#da3633' : '#238636';
+                const li = document.createElement('li');
+                li.textContent = displayName;
+                if (p.status === 'caught') {
+                    li.classList.add('caught');
+                    li.textContent += ' [CAUGHT]';
+                }
 
-            const li = document.createElement('li');
-            li.textContent = displayName;
-            if (p.status === 'caught') {
-                li.classList.add('caught');
-                li.textContent += ' [CAUGHT]';
-            }
-
-            if (p.role === 'runner') {
-                if (runnersList) runnersList.appendChild(li);
-            } else {
-                if (seekersList) seekersList.appendChild(li);
-            }
-
-            // Stealth Logic: Teammates see each other live, opposing players are hidden from map
-            if (map && !isMe) {
-                const isTeammate = (p.role === myRole);
-
-                if (isTeammate) {
-                    if (!markers[id]) {
-                        markers[id] = L.circleMarker([p.lat, p.lng], {
-                            radius: 8,
-                            fillColor: color,
-                            color: '#fff',
-                            weight: 1,
-                            fillOpacity: 0.8
-                        }).addTo(map).bindPopup(`${p.name.toUpperCase()} (${p.role})`);
-                    } else {
-                        markers[id].setLatLng([p.lat, p.lng]);
-                    }
+                if (p.role === 'runner') {
+                    if (runnersList) runnersList.appendChild(li);
                 } else {
-                    if (markers[id]) {
+                    if (seekersList) seekersList.appendChild(li);
+                }
+
+                if (map && !isMe) {
+                    const isTeammate = (p.role === myRole);
+                    if (isTeammate) {
+                        if (!markers[id]) {
+                            markers[id] = L.circleMarker([p.lat, p.lng], {
+                                radius: 8,
+                                fillColor: color,
+                                color: '#fff',
+                                weight: 1,
+                                fillOpacity: 0.8
+                            }).addTo(map).bindPopup(`${p.name.toUpperCase()} (${p.role})`);
+                        } else {
+                            markers[id].setLatLng([p.lat, p.lng]);
+                        }
+                    } else {
+                        if (markers[id]) {
+                            map.removeLayer(markers[id]);
+                            delete markers[id];
+                        }
+                    }
+                }
+            }
+
+            if (map) {
+                for (const id in markers) {
+                    if (!players[id]) {
                         map.removeLayer(markers[id]);
                         delete markers[id];
                     }
                 }
             }
-        }
+        });
 
-        if (map) {
-            for (const id in markers) {
-                if (!players[id]) {
-                    map.removeLayer(markers[id]);
-                    delete markers[id];
-                }
+        socket.on('player-moved', ({ id, lat, lng }) => {
+            if (markers[id]) {
+                markers[id].setLatLng([lat, lng]);
             }
-        }
-    });
+        });
 
-    socket.on('player-moved', ({ id, lat, lng }) => {
-        if (markers[id]) {
-            markers[id].setLatLng([lat, lng]);
-        }
-    });
+        socket.on('runner-ping', ({ lat, lng, message }) => {
+            if (alertBanner) {
+                alertBanner.textContent = message;
+                alertBanner.classList.remove('hidden');
+                setTimeout(() => alertBanner.classList.add('hidden'), 5000);
+            }
+        });
 
-    socket.on('runner-ping', ({ lat, lng, message }) => {
-        showAlert(message);
-
-        if (myRole === 'runner') {
-            playBeep();
-        } else if (myRole === 'seeker' || cheatUnlocked) {
-            if (!map) return;
-            const pingCircle = L.circle([lat, lng], {
-                color: 'red',
-                fillColor: '#da3633',
-                fillOpacity: 0.5,
-                radius: 40
-            }).addTo(map);
-
-            setTimeout(() => {
-                map.removeLayer(pingCircle);
-            }, 30000);
-        }
-    });
-
-    socket.on('timer-update', ({ timeFormatted }) => {
-        if (hudTimer) hudTimer.textContent = timeFormatted;
-    });
+        socket.on('timer-update', ({ timeFormatted }) => {
+            if (hudTimer) hudTimer.textContent = timeFormatted;
+        });
+    }
 
     if (cheatPingBtn) {
         cheatPingBtn.addEventListener('click', () => {
-            socket.emit('manual-ping', { roomCode });
+            if (socket) socket.emit('manual-ping', { roomCode });
         });
     }
 
     if (catchBtn) {
         catchBtn.addEventListener('click', () => {
             if (runnersSelectList) runnersSelectList.innerHTML = '';
-            
             const activeRunners = Object.values(playersData).filter(p => p.role === 'runner' && p.status === 'active');
             
             if (activeRunners.length === 0) {
@@ -265,11 +240,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 btn.className = 'runner-select-btn';
                 btn.textContent = `Catch ${runner.name.toUpperCase()}`;
                 btn.addEventListener('click', () => {
-                    socket.emit('attempt-catch', {
-                        roomCode,
-                        seekerId: socket.id,
-                        runnerId: runner.id
-                    });
+                    if (socket) {
+                        socket.emit('attempt-catch', { roomCode, seekerId: socket.id, runnerId: runner.id });
+                    }
                     if (catchModal) catchModal.classList.add('hidden');
                 });
                 if (runnersSelectList) runnersSelectList.appendChild(btn);
@@ -283,23 +256,5 @@ document.addEventListener('DOMContentLoaded', () => {
         closeModalBtn.addEventListener('click', () => {
             if (catchModal) catchModal.classList.add('hidden');
         });
-    }
-
-    socket.on('catch-failed', ({ message }) => {
-        showAlert(message);
-    });
-
-    socket.on('game-over', ({ winner, message }) => {
-        alert(`GAME OVER! Winner: ${winner}\n${message}`);
-        location.reload();
-    });
-
-    function showAlert(text) {
-        if (!alertBanner) return;
-        alertBanner.textContent = text;
-        alertBanner.classList.remove('hidden');
-        setTimeout(() => {
-            alertBanner.classList.add('hidden');
-        }, 5000);
     }
 });
