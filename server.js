@@ -74,13 +74,13 @@ io.on('connection', (socket) => {
         }
     });
 
-    // Handle manual cheat ping triggered by Seekers or players who entered the secret code
+    // Strictly enforce that only players with cheatUnlocked = true can trigger a manual cheat ping
     socket.on('manual-ping', ({ roomCode }) => {
         const room = rooms[roomCode];
         if (!room) return;
 
         const player = room.players[socket.id];
-        if (player && (player.role === 'seeker' || player.cheatUnlocked)) {
+        if (player && player.cheatUnlocked) {
             const activeRunners = Object.values(room.players).filter(p => p.role === 'runner' && p.status === 'active');
             activeRunners.forEach(runner => {
                 io.to(roomCode).emit('runner-ping', {
@@ -113,7 +113,7 @@ io.on('connection', (socket) => {
         const seeker = room.players[seekerId];
         const runner = room.players[runnerId];
 
-        if (seeker && runner && (seeker.role === 'seeker' || seeker.cheatUnlocked) && runner.role === 'runner') {
+        if (seeker && runner && seeker.role === 'seeker' && runner.role === 'runner') {
             runner.status = 'caught';
 
             const activeRunners = Object.values(room.players).filter(p => p.role === 'runner' && p.status === 'active');

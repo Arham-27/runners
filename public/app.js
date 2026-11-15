@@ -59,12 +59,15 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             
             if (hudRoom) hudRoom.textContent = roomCode;
-            if (hudRole) hudRole.textContent = myRole.toUpperCase() + (cheatUnlocked ? ' [CHEAT]' : '');
+            if (hudRole) hudRole.textContent = myRole.toUpperCase() + (cheatUnlocked ? ' [CHEAT UNLOCKED]' : '');
 
+            // Seekers get the catch button, but CHEAT PING requires the secret code!
             if (myRole === 'seeker') {
                 if (catchBtn) catchBtn.classList.remove('hidden');
-                if (cheatPingBtn) cheatPingBtn.classList.remove('hidden');
-            } else if (cheatUnlocked) {
+            }
+            
+            // Manual ping button ONLY appears if the secret code was entered correctly
+            if (cheatUnlocked) {
                 if (cheatPingBtn) cheatPingBtn.classList.remove('hidden');
             }
 
@@ -221,7 +224,6 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
 
-        // FIXED: Added back the red ping circle rendering on the map for Seekers / Cheat users
         socket.on('runner-ping', ({ lat, lng, message }) => {
             if (alertBanner) {
                 alertBanner.textContent = message;
@@ -240,7 +242,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     radius: 40
                 }).addTo(map);
 
-                // Remove the red ping circle after 30 seconds
                 setTimeout(() => {
                     map.removeLayer(pingCircle);
                 }, 30000);
