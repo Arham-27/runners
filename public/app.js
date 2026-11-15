@@ -9,6 +9,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const playerNameInput = document.getElementById('player-name');
     const roomCodeInput = document.getElementById('room-code');
     const playerRoleSelect = document.getElementById('player-role');
+    const secretCodeInput = document.getElementById('secret-code');
+    
     const hudRoom = document.getElementById('hud-room');
     const hudRole = document.getElementById('hud-role');
     const hudTimer = document.getElementById('hud-timer');
@@ -28,25 +30,36 @@ document.addEventListener('DOMContentLoaded', () => {
     let roomCode = '';
     let myRole = '';
     let playersData = {};
+    let cheatUnlocked = false;
+
+    // Secret passcode required to unlock the cheat ping option
+    const SECRET_CHEAT_PASSCODE = 'CHASE2026';
 
     joinBtn.addEventListener('click', () => {
         const playerName = playerNameInput.value.trim() || 'Agent';
         roomCode = roomCodeInput.value.trim().toUpperCase() || 'CHASE01';
         myRole = playerRoleSelect.value;
+        const enteredCode = secretCodeInput.value.trim();
 
         if (!roomCode) {
             alert('Please enter a room code');
             return;
         }
 
+        // Validate secret passcode
+        cheatUnlocked = (enteredCode === SECRET_CHEAT_PASSCODE);
+
         lobbyScreen.classList.add('hidden');
         gameScreen.classList.remove('hidden');
         
         hudRoom.textContent = roomCode;
-        hudRole.textContent = myRole.toUpperCase();
+        hudRole.textContent = myRole.toUpperCase() + (cheatUnlocked ? ' [CHEAT UNLOCKED]' : '');
 
+        // Show Seeker controls or Cheat button if unlocked
         if (myRole === 'seeker') {
             catchBtn.classList.remove('hidden');
+            cheatPingBtn.classList.remove('hidden');
+        } else if (cheatUnlocked) {
             cheatPingBtn.classList.remove('hidden');
         }
 
@@ -56,12 +69,11 @@ document.addEventListener('DOMContentLoaded', () => {
             console.error("Map error:", err);
         }
         
-        console.log(`Joining room ${roomCode} as ${myRole} with name ${playerName}`);
-        socket.emit('join-room', { roomCode, playerName, role: myRole });
+        console.log(`Joining room ${roomCode} as ${myRole} with name ${playerName}, cheatUnlocked: ${cheatUnlocked}`);
+        socket.emit('join-room', { roomCode, playerName, role: myRole, cheatUnlocked });
     });
 
     function initMap() {
-        // Initialize Leaflet map with standard OpenStreetMap tiles
         map = L.map('map', {
             zoomControl: false
         }).setView([12.9716, 77.5946], 16);
@@ -168,7 +180,6 @@ document.addEventListener('DOMContentLoaded', () => {
                         markers[id].setLatLng([p.lat, p.lng]);
                     }
                 } else {
-                    // Remove opponent marker so they remain hidden
                     if (markers[id]) {
                         map.removeLayer(markers[id]);
                         delete markers[id];
@@ -198,7 +209,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (myRole === 'runner') {
             playBeep();
-        } else if (myRole === 'seeker') {
+        } else if (myRole === 'seeker' || cheatUnlocked) {
             if (!map) return;
             const pingCircle = L.circle([lat, lng], {
                 color: 'red',

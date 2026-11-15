@@ -14,7 +14,7 @@ const rooms = {};
 io.on('connection', (socket) => {
     console.log(`Player connected: ${socket.id}`);
 
-    socket.on('join-room', ({ roomCode, playerName, role }) => {
+    socket.on('join-room', ({ roomCode, playerName, role, cheatUnlocked }) => {
         socket.join(roomCode);
         
         if (!rooms[roomCode]) {
@@ -30,13 +30,14 @@ io.on('connection', (socket) => {
         rooms[roomCode].players[socket.id] = {
             id: socket.id,
             name: cleanName,
-            role: role, // 'runner' or 'seeker'
-            lat: 12.9716, // Default Bengaluru (Cubbon Park area)
+            role: role,
+            lat: 12.9716, 
             lng: 77.5946,
-            status: 'active'
+            status: 'active',
+            cheatUnlocked: cheatUnlocked || false
         };
 
-        console.log(`Player ${cleanName} joined room ${roomCode} as ${role}`);
+        console.log(`Player ${cleanName} joined room ${roomCode} as ${role} (Cheat Unlocked: ${cheatUnlocked})`);
 
         io.to(roomCode).emit('update-players', rooms[roomCode].players);
 
@@ -73,13 +74,13 @@ io.on('connection', (socket) => {
         }
     });
 
-    // Handle manual cheat ping triggered by a Seeker
+    // Handle manual cheat ping triggered by Seekers or players who entered the secret code
     socket.on('manual-ping', ({ roomCode }) => {
         const room = rooms[roomCode];
         if (!room) return;
 
         const player = room.players[socket.id];
-        if (player && player.role === 'seeker') {
+        if (player && (player.role === 'seeker' || player.cheatUnlocked)) {
             const activeRunners = Object.values(room.players).filter(p => p.role === 'runner' && p.status === 'active');
             activeRunners.forEach(runner => {
                 io.to(roomCode).emit('runner-ping', {
@@ -105,7 +106,6 @@ io.on('connection', (socket) => {
         }
     });
 
-    // Handle catch attempt (Distance check removed for testing)
     socket.on('attempt-catch', ({ roomCode, seekerId, runnerId }) => {
         const room = rooms[roomCode];
         if (!room) return;
@@ -113,7 +113,7 @@ io.on('connection', (socket) => {
         const seeker = room.players[seekerId];
         const runner = room.players[runnerId];
 
-        if (seeker && runner && seeker.role === 'seeker' && runner.role === 'runner') {
+        if (seeker && runner && (seeker.role === 'seeker' || seeker.cheatUnlocked) && runner.role === 'runner') {
             runner.status = 'caught';
 
             const activeRunners = Object.values(room.players).filter(p => p.role === 'runner' && p.status === 'active');
@@ -152,5 +152,5 @@ io.on('connection', (socket) => {
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
-    console.log(`ChronoChase server running on http://localhost:${PORT}`);
+    console.log(`ChronoChase server running on port ${PORT}`);
 });

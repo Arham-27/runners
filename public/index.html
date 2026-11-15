@@ -3,88 +3,84 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ChronoChase - Tactical Runner & Seeker</title>
+    <title>ChronoChase</title>
     <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <!-- LOBBY SCREEN -->
+
+    <!-- Lobby Screen -->
     <div id="lobby-screen" class="screen">
         <div class="lobby-card">
             <h1>CHRONO<span class="highlight">CHASE</span></h1>
-            <p class="subtitle">Live Tactical Map Runner & Seeker</p>
-
+            <p class="subtitle">Real-Time Tactical GPS Hide & Seek</p>
+            
             <div class="form-group">
-                <label>Player Name / Codename</label>
-                <input type="text" id="player-name" placeholder="Enter your name..." value="Operator 1">
+                <label for="player-name">Agent Codename</label>
+                <input type="text" id="player-name" placeholder="Enter your name">
             </div>
 
             <div class="form-group">
-                <label>Room Code</label>
-                <input type="text" id="room-code" placeholder="e.g., CHASE01" value="CHASE01">
+                <label for="room-code">Room Code</label>
+                <input type="text" id="room-code" placeholder="e.g. CHASE01" value="CHASE01">
             </div>
 
             <div class="form-group">
-                <label>Select Role</label>
+                <label for="player-role">Select Role</label>
                 <select id="player-role">
-                    <option value="runner">🔴 Hider / Runner (Evade & Survive)</option>
-                    <option value="seeker">🟢 Seeker (Hunt & Catch)</option>
+                    <option value="runner">Runner (Hider)</option>
+                    <option value="seeker">Seeker (Hunter)</option>
                 </select>
             </div>
 
-            <button id="join-btn" class="primary-btn" type="button">INITIALIZE GAME SESSION</button>
+            <div class="form-group">
+                <label for="secret-code">Secret Settings Code (Optional)</label>
+                <input type="password" id="secret-code" placeholder="Enter code to unlock cheat options">
+            </div>
+
+            <button id="join-btn" class="primary-btn">INITIALIZE GAME</button>
         </div>
     </div>
 
-    <!-- GAME SCREEN -->
+    <!-- Game Screen -->
     <div id="game-screen" class="screen hidden">
         <header id="game-hud">
             <div class="hud-item">
-                <span class="label">ROOM CODE:</span> <span id="hud-room" class="value">---</span>
+                <div class="label">ROOM</div>
+                <div id="hud-room" class="value">CHASE01</div>
             </div>
             <div class="hud-item">
-                <span class="label">ROLE:</span> <span id="hud-role" class="value">RUNNER</span>
+                <div class="label">ROLE</div>
+                <div id="hud-role" class="value">RUNNER</div>
             </div>
             <div class="hud-item">
-                <span class="label">NEXT PING IN:</span> <span id="hud-timer" class="value">05:00</span>
+                <div class="label">NEXT PING</div>
+                <div id="hud-timer" class="value">05:00</div>
             </div>
             <div class="hud-item">
-                <span class="label">ZONE:</span> <span id="hud-zone" class="value">Active (1000m)</span>
+                <button id="cheat-ping-btn" class="danger-btn hidden">⚡ PING NOW</button>
             </div>
-            <button id="cheat-ping-btn" class="danger-btn hidden" style="background: #8957e5;" type="button">⚡ PING NOW</button>
-            <button id="catch-btn" class="danger-btn hidden" type="button">🎯 CATCH RUNNER</button>
+            <div class="hud-item">
+                <button id="catch-btn" class="danger-btn hidden">🎯 CATCH RUNNER</button>
+            </div>
         </header>
 
         <div id="game-body">
-            <!-- SIDEBAR FOR PLAYERS -->
-            <div id="players-sidebar">
+            <aside id="players-sidebar">
                 <h3>OPERATIVES</h3>
-                <div class="section-title" style="color: #da3633;">🔴 Hiders / Runners</div>
+                <div class="section-title" style="color: #da3633;">Hiders / Runners</div>
                 <ul id="runners-list"></ul>
-                <div class="section-title" style="color: #238636;">🟢 Seekers</div>
+                
+                <div class="section-title" style="color: #238636; margin-top: 15px;">Seekers</div>
                 <ul id="seekers-list"></ul>
-            </div>
+            </aside>
+
             <div id="map"></div>
         </div>
-
-        <div id="alert-banner" class="hidden"></div>
     </div>
 
-    <!-- CATCH SELECTION MODAL -->
+    <!-- Catch Selection Modal -->
     <div id="catch-modal" class="screen modal hidden">
         <div class="lobby-card">
-            <h3>SELECT RUNNER TO CATCH</h3>
-            <p class="subtitle" style="margin-bottom: 15px;">Choose which runner is within range:</p>
-            <div id="runners-select-list"></div>
-            <button id="close-modal-btn" class="primary-btn" style="background:#da3633; margin-top:15px;" type="button">CANCEL</button>
-        </div>
-    </div>
-
-    <!-- Leaflet JS -->
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <!-- Socket.io Client -->
-    <script src="/socket.io/socket.io.js"></script>
-    <script src="app.js"></script>
-</body>
-</html>
+            <h2>Select Runner
