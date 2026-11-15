@@ -9,7 +9,7 @@ const io = new Server(server);
 
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Store players grouped by room, defaulting CHASE01
+// Store players grouped by room, defaulting to CHASE01
 const rooms = {
     'CHASE01': {}
 };
@@ -17,7 +17,6 @@ const rooms = {
 io.on('connection', (socket) => {
     console.log(`Player connected: ${socket.id}`);
 
-    // Automatically assign to default room CHASE01 on connection
     const defaultRoom = 'CHASE01';
     socket.join(defaultRoom);
 
@@ -34,8 +33,8 @@ io.on('connection', (socket) => {
     if (!rooms[defaultRoom]) rooms[defaultRoom] = {};
     rooms[defaultRoom][socket.id] = socket.data;
 
-    // Immediately broadcast player list so the sidebar populates instantly
-    io.to(defaultRoom).emit('updatePlayers', rooms[defaultRoom]);
+    // Send players as an ARRAY so frontend loops work properly
+    io.to(defaultRoom).emit('updatePlayers', Object.values(rooms[defaultRoom]));
 
     // Handle explicit room switching if requested by UI
     socket.on('joinRoom', ({ room, name, role }) => {
@@ -52,7 +51,7 @@ io.on('connection', (socket) => {
         if (!rooms[targetRoom]) rooms[targetRoom] = {};
         rooms[targetRoom][socket.id] = socket.data;
 
-        io.to(targetRoom).emit('updatePlayers', rooms[targetRoom]);
+        io.to(targetRoom).emit('updatePlayers', Object.values(rooms[targetRoom]));
     });
 
     // Handle position updates
@@ -63,7 +62,7 @@ io.on('connection', (socket) => {
             rooms[room][socket.id].lon = data.lon;
             if (data.name) rooms[room][socket.id].name = data.name;
 
-            io.to(room).emit('updatePlayers', rooms[room]);
+            io.to(room).emit('updatePlayers', Object.values(rooms[room]));
         }
     });
 
@@ -72,7 +71,7 @@ io.on('connection', (socket) => {
         const room = socket.data.room;
         if (rooms[room] && rooms[room][socket.id]) {
             rooms[room][socket.id].role = role;
-            io.to(room).emit('updatePlayers', rooms[room]);
+            io.to(room).emit('updatePlayers', Object.values(rooms[room]));
         }
     });
 
@@ -104,7 +103,7 @@ io.on('connection', (socket) => {
             runner.caught = true;
 
             io.to(room).emit('gameNotification', `${runner.name} has been caught!`);
-            io.to(room).emit('updatePlayers', roomPlayers);
+            io.to(room).emit('updatePlayers', Object.values(roomPlayers));
 
             // Check if any active runners are left in the room
             const activeRunners = Object.values(roomPlayers).filter(p => p.role === 'runner' && !p.caught);
@@ -118,7 +117,7 @@ io.on('connection', (socket) => {
                         roomPlayers[id].role = 'runner';
                     }
                     io.to(room).emit('returnToLobby');
-                    io.to(room).emit('updatePlayers', roomPlayers);
+                    io.to(room).emit('updatePlayers', Object.values(roomPlayers));
                 }, 3000);
             }
         }
@@ -130,7 +129,7 @@ io.on('connection', (socket) => {
         const room = socket.data.room;
         if (rooms[room] && rooms[room][socket.id]) {
             delete rooms[room][socket.id];
-            io.to(room).emit('updatePlayers', rooms[room]);
+            io.to(room).emit('updatePlayers', Object.values(rooms[room]));
         }
     });
 });
