@@ -33,14 +33,16 @@ io.on('connection', (socket) => {
     if (!rooms[defaultRoom]) rooms[defaultRoom] = {};
     rooms[defaultRoom][socket.id] = socket.data;
 
-    // Send players as an ARRAY so frontend loops work properly
+    // Broadcast players as an ARRAY so frontend client loops work properly
     io.to(defaultRoom).emit('updatePlayers', Object.values(rooms[defaultRoom]));
 
     // Handle explicit room switching if requested by UI
     socket.on('joinRoom', ({ room, name, role }) => {
         const targetRoom = (room || defaultRoom).toUpperCase();
         socket.leave(socket.data.room);
-        delete rooms[socket.data.room]?.[socket.id];
+        if (rooms[socket.data.room]) {
+            delete rooms[socket.data.room][socket.id];
+        }
 
         socket.data.room = targetRoom;
         socket.join(targetRoom);
@@ -75,7 +77,7 @@ io.on('connection', (socket) => {
         }
     });
 
-    // Handle secure manual cheat ping (Passcode: CHASE2026)
+    // Handle secure manual cheat ping with passcode validation (CHASE2026)
     socket.on('requestCheatPing', ({ passcode }) => {
         const room = socket.data.room;
         if (passcode === 'CHASE2026') {
@@ -102,19 +104,21 @@ io.on('connection', (socket) => {
         if (seeker && seeker.role === 'seeker' && runner && runner.role === 'runner' && !runner.caught) {
             runner.caught = true;
 
+            // 1. Broadcast catch notification and updated player array
             io.to(room).emit('gameNotification', `${runner.name} has been caught!`);
             io.to(room).emit('updatePlayers', Object.values(roomPlayers));
 
-            // Check if any active runners are left in the room
+            // 2. Check if any active (uncaught) runners are left
             const activeRunners = Object.values(roomPlayers).filter(p => p.role === 'runner' && !p.caught);
 
             if (activeRunners.length === 0) {
+                // 3. Trigger Game Over and reset lobby after 3 seconds
                 io.to(room).emit('gameOver', 'Game Over! All runners have been caught.');
 
                 setTimeout(() => {
                     for (let id in roomPlayers) {
                         roomPlayers[id].caught = false;
-                        roomPlayers[id].role = 'runner';
+                        roomPlayers[id].role = 'runner'; // Reset state back to lobby
                     }
                     io.to(room).emit('returnToLobby');
                     io.to(room).emit('updatePlayers', Object.values(roomPlayers));
@@ -123,7 +127,7 @@ io.on('connection', (socket) => {
         }
     });
 
-    // Handle disconnection
+    // Handle player disconnection
     socket.on('disconnect', () => {
         console.log(`Player disconnected: ${socket.id}`);
         const room = socket.data.room;
