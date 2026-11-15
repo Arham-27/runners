@@ -32,48 +32,51 @@ document.addEventListener('DOMContentLoaded', () => {
     let playersData = {};
     let cheatUnlocked = false;
 
-    // Secret passcode required to unlock the cheat ping option
     const SECRET_CHEAT_PASSCODE = 'CHASE2026';
 
     joinBtn.addEventListener('click', () => {
-        const playerName = playerNameInput.value.trim() || 'Agent';
-        roomCode = roomCodeInput.value.trim().toUpperCase() || 'CHASE01';
-        myRole = playerRoleSelect.value;
-        const enteredCode = secretCodeInput.value.trim();
+        const playerName = playerNameInput && playerNameInput.value.trim() ? playerNameInput.value.trim() : 'Agent';
+        roomCode = roomCodeInput && roomCodeInput.value.trim() ? roomCodeInput.value.trim().toUpperCase() : 'CHASE01';
+        myRole = playerRoleSelect ? playerRoleSelect.value : 'runner';
+        const enteredCode = secretCodeInput ? secretCodeInput.value.trim() : '';
 
         if (!roomCode) {
             alert('Please enter a room code');
             return;
         }
 
-        // Validate secret passcode
         cheatUnlocked = (enteredCode === SECRET_CHEAT_PASSCODE);
 
+        // Switch screens immediately
         lobbyScreen.classList.add('hidden');
         gameScreen.classList.remove('hidden');
         
         hudRoom.textContent = roomCode;
         hudRole.textContent = myRole.toUpperCase() + (cheatUnlocked ? ' [CHEAT UNLOCKED]' : '');
 
-        // Show Seeker controls or Cheat button if unlocked
         if (myRole === 'seeker') {
-            catchBtn.classList.remove('hidden');
-            cheatPingBtn.classList.remove('hidden');
+            if (catchBtn) catchBtn.classList.remove('hidden');
+            if (cheatPingBtn) cheatPingBtn.classList.remove('hidden');
         } else if (cheatUnlocked) {
-            cheatPingBtn.classList.remove('hidden');
+            if (cheatPingBtn) cheatPingBtn.classList.remove('hidden');
         }
 
-        try {
-            initMap();
-        } catch (err) {
-            console.error("Map error:", err);
-        }
+        // Delay map initialization slightly so DOM container is visible and has dimensions
+        setTimeout(() => {
+            try {
+                initMap();
+            } catch (err) {
+                console.error("Map error:", err);
+            }
+        }, 150);
         
         console.log(`Joining room ${roomCode} as ${myRole} with name ${playerName}, cheatUnlocked: ${cheatUnlocked}`);
         socket.emit('join-room', { roomCode, playerName, role: myRole, cheatUnlocked });
     });
 
     function initMap() {
+        if (map) return; // Prevent double initialization
+
         map = L.map('map', {
             zoomControl: false
         }).setView([12.9716, 77.5946], 16);
@@ -84,6 +87,11 @@ document.addEventListener('DOMContentLoaded', () => {
             maxZoom: 19,
             attribution: '&copy; OpenStreetMap contributors'
         }).addTo(map);
+
+        // Invalidate size to fix rendering glitches inside hidden containers
+        setTimeout(() => {
+            map.invalidateSize();
+        }, 200);
 
         if (navigator.geolocation) {
             navigator.geolocation.watchPosition(
@@ -140,8 +148,8 @@ document.addEventListener('DOMContentLoaded', () => {
     socket.on('update-players', (players) => {
         console.log("Players update received:", players);
         playersData = players;
-        runnersList.innerHTML = '';
-        seekersList.innerHTML = '';
+        if (runnersList) runnersList.innerHTML = '';
+        if (seekersList) seekersList.innerHTML = '';
 
         for (const id in players) {
             const p = players[id];
@@ -158,9 +166,9 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             if (p.role === 'runner') {
-                runnersList.appendChild(li);
+                if (runnersList) runnersList.appendChild(li);
             } else {
-                seekersList.appendChild(li);
+                if (seekersList) seekersList.appendChild(li);
             }
 
             // Stealth Logic: Teammates see each other live, opposing players are hidden from map
@@ -225,44 +233,50 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     socket.on('timer-update', ({ timeFormatted }) => {
-        hudTimer.textContent = timeFormatted;
+        if (hudTimer) hudTimer.textContent = timeFormatted;
     });
 
-    cheatPingBtn.addEventListener('click', () => {
-        socket.emit('manual-ping', { roomCode });
-    });
-
-    catchBtn.addEventListener('click', () => {
-        runnersSelectList.innerHTML = '';
-        
-        const activeRunners = Object.values(playersData).filter(p => p.role === 'runner' && p.status === 'active');
-        
-        if (activeRunners.length === 0) {
-            alert('No active runners left to catch!');
-            return;
-        }
-
-        activeRunners.forEach(runner => {
-            const btn = document.createElement('button');
-            btn.className = 'runner-select-btn';
-            btn.textContent = `Catch ${runner.name.toUpperCase()}`;
-            btn.addEventListener('click', () => {
-                socket.emit('attempt-catch', {
-                    roomCode,
-                    seekerId: socket.id,
-                    runnerId: runner.id
-                });
-                catchModal.classList.add('hidden');
-            });
-            runnersSelectList.appendChild(btn);
+    if (cheatPingBtn) {
+        cheatPingBtn.addEventListener('click', () => {
+            socket.emit('manual-ping', { roomCode });
         });
+    }
 
-        catchModal.classList.remove('hidden');
-    });
+    if (catchBtn) {
+        catchBtn.addEventListener('click', () => {
+            if (runnersSelectList) runnersSelectList.innerHTML = '';
+            
+            const activeRunners = Object.values(playersData).filter(p => p.role === 'runner' && p.status === 'active');
+            
+            if (activeRunners.length === 0) {
+                alert('No active runners left to catch!');
+                return;
+            }
 
-    closeModalBtn.addEventListener('click', () => {
-        catchModal.classList.add('hidden');
-    });
+            activeRunners.forEach(runner => {
+                const btn = document.createElement('button');
+                btn.className = 'runner-select-btn';
+                btn.textContent = `Catch ${runner.name.toUpperCase()}`;
+                btn.addEventListener('click', () => {
+                    socket.emit('attempt-catch', {
+                        roomCode,
+                        seekerId: socket.id,
+                        runnerId: runner.id
+                    });
+                    if (catchModal) catchModal.classList.add('hidden');
+                });
+                if (runnersSelectList) runnersSelectList.appendChild(btn);
+            });
+
+            if (catchModal) catchModal.classList.remove('hidden');
+        });
+    }
+
+    if (closeModalBtn) {
+        closeModalBtn.addEventListener('click', () => {
+            if (catchModal) catchModal.classList.add('hidden');
+        });
+    }
 
     socket.on('catch-failed', ({ message }) => {
         showAlert(message);
@@ -274,6 +288,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     function showAlert(text) {
+        if (!alertBanner) return;
         alertBanner.textContent = text;
         alertBanner.classList.remove('hidden');
         setTimeout(() => {
