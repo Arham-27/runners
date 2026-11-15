@@ -5,126 +5,147 @@ const path = require('path');
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server); // Initialized properly at the root level
+const io = new Server(server);
 
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Store players grouped by room, defaulting to CHASE01
-const rooms = {
-    'CHASE01': {}
-};
+const rooms = {};
 
 io.on('connection', (socket) => {
     console.log(`Player connected: ${socket.id}`);
 
-    const defaultRoom = 'CHASE01';
-    socket.join(defaultRoom);
-
-    socket.data = {
-        id: socket.id,
-        name: `Player_${socket.id.substring(0, 4)}`,
-        room: defaultRoom,
-        role: 'runner',
-        lat: 0,
-        lon: 0,
-        caught: false
-    };
-
-    if (!rooms[defaultRoom]) rooms[defaultRoom] = {};
-    rooms[defaultRoom][socket.id] = socket.data;
-
-    // Broadcast player array so frontend client loops work properly
-    io.to(defaultRoom).emit('updatePlayers', Object.values(rooms[defaultRoom]));
-
-    socket.on('joinRoom', ({ room, name, role }) => {
-        const targetRoom = (room || defaultRoom).toUpperCase();
-        socket.leave(socket.data.room);
-        if (rooms[socket.data.room]) {
-            delete rooms[socket.data.room][socket.id];
+    socket.on('join-room', ({ roomCode, playerName, role, cheatUnlocked }) => {
+        socket.join(roomCode);
+        
+        if (!rooms[roomCode]) {
+            rooms[roomCode] = {
+                players: {},
+                pingTimer: null,
+                pingTimeLeft: 300 // 5 minutes
+            };
         }
 
-        socket.data.room = targetRoom;
-        socket.join(targetRoom);
+        const cleanName = playerName ? playerName.trim() : (role === 'runner' ? 'Runner' : 'Seeker');
 
-        if (name) socket.data.name = name;
-        if (role) socket.data.role = role;
+        rooms[roomCode].players[socket.id] = {
+            id: socket.id,
+            name: cleanName,
+            role: role,
+            lat: 12.9716, 
+            lng: 77.5946,
+            status: 'active',
+            cheatUnlocked: cheatUnlocked || false
+        };
 
-        if (!rooms[targetRoom]) rooms[targetRoom] = {};
-        rooms[targetRoom][socket.id] = socket.data;
+        console.log(`Player ${cleanName} joined room ${roomCode} as ${role} (Cheat Unlocked: ${cheatUnlocked})`);
 
-        io.to(targetRoom).emit('updatePlayers', Object.values(rooms[targetRoom]));
-    });
+        io.to(roomCode).emit('update-players', rooms[roomCode].players);
 
-    socket.on('updatePosition', (data) => {
-        const room = socket.data.room;
-        if (rooms[room] && rooms[room][socket.id]) {
-            rooms[room][socket.id].lat = data.lat;
-            rooms[room][socket.id].lon = data.lon;
-            if (data.name) rooms[room][socket.id].name = data.name;
+        const currentMins = String(Math.floor(rooms[roomCode].pingTimeLeft / 60)).padStart(2, '0');
+        const currentSecs = String(rooms[roomCode].pingTimeLeft % 60).padStart(2, '0');
+        socket.emit('timer-update', { timeFormatted: `${currentMins}:${currentSecs}` });
 
-            io.to(room).emit('updatePlayers', Object.values(rooms[room]));
+        if (!rooms[roomCode].pingTimer) {
+            rooms[roomCode].pingTimer = setInterval(() => {
+                const room = rooms[roomCode];
+                if (!room) return;
+                
+                room.pingTimeLeft--;
+
+                if (room.pingTimeLeft <= 0) {
+                    room.pingTimeLeft = 300;
+                    
+                    const activeRunners = Object.values(room.players).filter(p => p.role === 'runner' && p.status === 'active');
+                    activeRunners.forEach(runner => {
+                        io.to(roomCode).emit('runner-ping', {
+                            lat: runner.lat,
+                            lng: runner.lng,
+                            runnerId: runner.id,
+                            message: `🚨 ${runner.name.toUpperCase()} PINGED!`
+                        });
+                    });
+                }
+
+                const mins = String(Math.floor(room.pingTimeLeft / 60)).padStart(2, '0');
+                const secs = String(room.pingTimeLeft % 60).padStart(2, '0');
+                io.to(roomCode).emit('timer-update', { timeFormatted: `${mins}:${secs}` });
+
+            }, 1000);
         }
     });
 
-    socket.on('setRole', (role) => {
-        const room = socket.data.room;
-        if (rooms[room] && rooms[room][socket.id]) {
-            rooms[room][socket.id].role = role;
-            io.to(room).emit('updatePlayers', Object.values(rooms[room]));
-        }
-    });
+    // Strictly enforce that only players with cheatUnlocked = true can trigger a manual cheat ping
+    socket.on('manual-ping', ({ roomCode }) => {
+        const room = rooms[roomCode];
+        if (!room) return;
 
-    socket.on('requestCheatPing', ({ passcode }) => {
-        const room = socket.data.room;
-        if (passcode === 'CHASE2026') {
-            io.to(room).emit('globalPing', {
-                senderId: socket.id,
-                lat: socket.data.lat,
-                lon: socket.data.lon,
-                name: socket.data.name
+        const player = room.players[socket.id];
+        if (player && player.cheatUnlocked) {
+            const activeRunners = Object.values(room.players).filter(p => p.role === 'runner' && p.status === 'active');
+            activeRunners.forEach(runner => {
+                io.to(roomCode).emit('runner-ping', {
+                    lat: runner.lat,
+                    lng: runner.lng,
+                    runnerId: runner.id,
+                    message: `⚡ CHEAT PING BY ${player.name.toUpperCase()}! ${runner.name.toUpperCase()} REVEALED!`
+                });
             });
-        } else {
-            socket.emit('pingError', 'Invalid passcode! Cheat ping denied.');
         }
     });
 
-    socket.on('catchRunner', ({ runnerId }) => {
-        const room = socket.data.room;
-        const roomPlayers = rooms[room];
-        if (!roomPlayers) return;
+    socket.on('update-location', ({ roomCode, lat, lng }) => {
+        if (rooms[roomCode] && rooms[roomCode].players[socket.id]) {
+            rooms[roomCode].players[socket.id].lat = lat;
+            rooms[roomCode].players[socket.id].lng = lng;
 
-        const seeker = roomPlayers[socket.id];
-        const runner = roomPlayers[runnerId];
+            socket.to(roomCode).emit('player-moved', {
+                id: socket.id,
+                lat,
+                lng
+            });
+        }
+    });
 
-        if (seeker && seeker.role === 'seeker' && runner && runner.role === 'runner' && !runner.caught) {
-            runner.caught = true;
+    socket.on('attempt-catch', ({ roomCode, seekerId, runnerId }) => {
+        const room = rooms[roomCode];
+        if (!room) return;
 
-            io.to(room).emit('gameNotification', `${runner.name} has been caught!`);
-            io.to(room).emit('updatePlayers', Object.values(roomPlayers));
+        const seeker = room.players[seekerId];
+        const runner = room.players[runnerId];
 
-            const activeRunners = Object.values(roomPlayers).filter(p => p.role === 'runner' && !p.caught);
+        if (seeker && runner && seeker.role === 'seeker' && runner.role === 'runner') {
+            runner.status = 'caught';
+
+            const activeRunners = Object.values(room.players).filter(p => p.role === 'runner' && p.status === 'active');
 
             if (activeRunners.length === 0) {
-                io.to(room).emit('gameOver', 'Game Over! All runners have been caught.');
-
-                setTimeout(() => {
-                    for (let id in roomPlayers) {
-                        roomPlayers[id].caught = false;
-                        roomPlayers[id].role = 'runner';
-                    }
-                    io.to(room).emit('returnToLobby');
-                    io.to(room).emit('updatePlayers', Object.values(roomPlayers));
-                }, 3000);
+                io.to(roomCode).emit('update-players', room.players);
+                io.to(roomCode).emit('game-over', {
+                    winner: 'Seekers',
+                    message: `${seeker.name.toUpperCase()} caught ${runner.name.toUpperCase()}! All runners eliminated! Seekers Win!`
+                });
+            } else {
+                io.to(roomCode).emit('update-players', room.players);
+                io.to(roomCode).emit('catch-failed', { 
+                    message: `🎯 CAUGHT! ${seeker.name.toUpperCase()} captured ${runner.name.toUpperCase()}! ${activeRunners.length} runner(s) remaining.` 
+                });
             }
         }
     });
 
     socket.on('disconnect', () => {
         console.log(`Player disconnected: ${socket.id}`);
-        const room = socket.data.room;
-        if (rooms[room] && rooms[room][socket.id]) {
-            delete rooms[room][socket.id];
-            io.to(room).emit('updatePlayers', Object.values(rooms[room]));
+        for (const roomCode in rooms) {
+            if (rooms[roomCode].players[socket.id]) {
+                delete rooms[roomCode].players[socket.id];
+                io.to(roomCode).emit('update-players', rooms[roomCode].players);
+                
+                if (Object.keys(rooms[roomCode].players).length === 0) {
+                    clearInterval(rooms[roomCode].pingTimer);
+                    delete rooms[roomCode];
+                }
+                break;
+            }
         }
     });
 });
