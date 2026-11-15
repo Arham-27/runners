@@ -34,48 +34,56 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const SECRET_CHEAT_PASSCODE = 'CHASE2026';
 
-    joinBtn.addEventListener('click', () => {
-        const playerName = playerNameInput && playerNameInput.value.trim() ? playerNameInput.value.trim() : 'Agent';
-        roomCode = roomCodeInput && roomCodeInput.value.trim() ? roomCodeInput.value.trim().toUpperCase() : 'CHASE01';
-        myRole = playerRoleSelect ? playerRoleSelect.value : 'runner';
-        const enteredCode = secretCodeInput ? secretCodeInput.value.trim() : '';
+    if (joinBtn) {
+        joinBtn.addEventListener('click', () => {
+            console.log("Initialize button clicked!");
 
-        if (!roomCode) {
-            alert('Please enter a room code');
-            return;
-        }
+            const playerName = playerNameInput && playerNameInput.value.trim() ? playerNameInput.value.trim() : 'Agent';
+            roomCode = roomCodeInput && roomCodeInput.value.trim() ? roomCodeInput.value.trim().toUpperCase() : 'CHASE01';
+            myRole = playerRoleSelect ? playerRoleSelect.value : 'runner';
+            const enteredCode = secretCodeInput ? secretCodeInput.value.trim() : '';
 
-        cheatUnlocked = (enteredCode === SECRET_CHEAT_PASSCODE);
-
-        // Switch screens immediately
-        lobbyScreen.classList.add('hidden');
-        gameScreen.classList.remove('hidden');
-        
-        hudRoom.textContent = roomCode;
-        hudRole.textContent = myRole.toUpperCase() + (cheatUnlocked ? ' [CHEAT UNLOCKED]' : '');
-
-        if (myRole === 'seeker') {
-            if (catchBtn) catchBtn.classList.remove('hidden');
-            if (cheatPingBtn) cheatPingBtn.classList.remove('hidden');
-        } else if (cheatUnlocked) {
-            if (cheatPingBtn) cheatPingBtn.classList.remove('hidden');
-        }
-
-        // Delay map initialization slightly so DOM container is visible and has dimensions
-        setTimeout(() => {
-            try {
-                initMap();
-            } catch (err) {
-                console.error("Map error:", err);
+            if (!roomCode) {
+                alert('Please enter a room code');
+                return;
             }
-        }, 150);
-        
-        console.log(`Joining room ${roomCode} as ${myRole} with name ${playerName}, cheatUnlocked: ${cheatUnlocked}`);
-        socket.emit('join-room', { roomCode, playerName, role: myRole, cheatUnlocked });
-    });
+
+            cheatUnlocked = (enteredCode === SECRET_CHEAT_PASSCODE);
+
+            // 1. Switch screens immediately so the UI responds instantly
+            if (lobbyScreen) lobbyScreen.classList.add('hidden');
+            if (gameScreen) gameScreen.classList.remove('hidden');
+            
+            if (hudRoom) hudRoom.textContent = roomCode;
+            if (hudRole) hudRole.textContent = myRole.toUpperCase() + (cheatUnlocked ? ' [CHEAT UNLOCKED]' : '');
+
+            if (myRole === 'seeker') {
+                if (catchBtn) catchBtn.classList.remove('hidden');
+                if (cheatPingBtn) cheatPingBtn.classList.remove('hidden');
+            } else if (cheatUnlocked) {
+                if (cheatPingBtn) cheatPingBtn.classList.remove('hidden');
+            }
+
+            // 2. Emit socket join event
+            console.log(`Joining room ${roomCode} as ${myRole} with name ${playerName}, cheatUnlocked: ${cheatUnlocked}`);
+            socket.emit('join-room', { roomCode, playerName, role: myRole, cheatUnlocked });
+
+            // 3. Initialize map after a short delay to ensure DOM dimensions are ready
+            setTimeout(() => {
+                try {
+                    initMap();
+                } catch (err) {
+                    console.error("Map initialization error:", err);
+                }
+            }, 200);
+        });
+    }
 
     function initMap() {
-        if (map) return; // Prevent double initialization
+        if (map) return;
+
+        const mapContainer = document.getElementById('map');
+        if (!mapContainer) return;
 
         map = L.map('map', {
             zoomControl: false
@@ -88,10 +96,9 @@ document.addEventListener('DOMContentLoaded', () => {
             attribution: '&copy; OpenStreetMap contributors'
         }).addTo(map);
 
-        // Invalidate size to fix rendering glitches inside hidden containers
         setTimeout(() => {
             map.invalidateSize();
-        }, 200);
+        }, 250);
 
         if (navigator.geolocation) {
             navigator.geolocation.watchPosition(
