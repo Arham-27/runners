@@ -1,0 +1,9 @@
+{
+  "appId": "com.chase.app",
+  "appName": "ChronoChase",
+  "webDir": "public",
+  "server": {
+    "url": "https://runandseek.onrender.com",
+    "cleartext": true
+  }
+}
