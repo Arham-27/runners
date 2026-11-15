@@ -16,9 +16,12 @@ jobs:
         with:
           node-version: 18
 
-      - name: Install dependencies & build
+      - name: Install dependencies
+        run: npm install
+
+      - name: Initialize Capacitor Android Platform
         run: |
-          npm install
+          npx cap add android || true
           npx cap sync android
 
       - name: Set up JDK 17
