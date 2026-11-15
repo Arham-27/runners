@@ -44,7 +44,7 @@
     </div>
 
     <!-- Game Screen -->
-    <div id="game-screen" class="screen hidden">
+    <div id="game-screen" class="screen hidden" style="display: none;">
         <header id="game-hud">
             <div class="hud-item">
                 <div class="label">ROOM</div>
@@ -83,4 +83,20 @@
     <!-- Catch Selection Modal -->
     <div id="catch-modal" class="screen modal hidden">
         <div class="lobby-card">
-            <h2>Select Runner
+            <h2>Select Runner to Catch</h2>
+            <p class="subtitle">Choose the target you have apprehended:</p>
+            <div id="runners-select-list" style="max-height: 200px; overflow-y: auto; margin-bottom: 15px;"></div>
+            <button id="close-modal-btn" class="primary-btn" style="background: #30363d;">Cancel</button>
+        </div>
+    </div>
+
+    <!-- Alert Notification Banner -->
+    <div id="alert-banner" class="hidden"></div>
+
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="/socket.io/socket.io.js"></script>
+    <!-- Cache buster ?v=99 forces mobile browsers to download the fresh script -->
+    <script src="app.js?v=99"></script>
+</body>
+</html>

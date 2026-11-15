@@ -1,17 +1,16 @@
 document.addEventListener('DOMContentLoaded', () => {
-    console.log("ChronoChase script initialized.");
+    console.log("ChronoChase script initialized successfully.");
 
-    // Safely connect socket
     let socket;
     try {
         socket = io();
     } catch (e) {
-        console.error("Socket.io error:", e);
+        console.error("Socket connection error:", e);
     }
 
+    const joinBtn = document.getElementById('join-btn');
     const lobbyScreen = document.getElementById('lobby-screen');
     const gameScreen = document.getElementById('game-screen');
-    const joinBtn = document.getElementById('join-btn');
     const playerNameInput = document.getElementById('player-name');
     const roomCodeInput = document.getElementById('room-code');
     const playerRoleSelect = document.getElementById('player-role');
@@ -42,8 +41,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (joinBtn) {
         joinBtn.addEventListener('click', () => {
-            alert("Button Clicked!"); // Debug alert to verify click works
-
             const playerName = playerNameInput && playerNameInput.value.trim() ? playerNameInput.value.trim() : 'Agent';
             roomCode = roomCodeInput && roomCodeInput.value.trim() ? roomCodeInput.value.trim().toUpperCase() : 'CHASE01';
             myRole = playerRoleSelect ? playerRoleSelect.value : 'runner';
@@ -51,7 +48,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             cheatUnlocked = (enteredCode === SECRET_CHEAT_PASSCODE);
 
-            // 1. Force hide lobby and show game screen
+            // Force hide lobby and show game screen
             if (lobbyScreen) {
                 lobbyScreen.style.display = 'none';
                 lobbyScreen.classList.add('hidden');
@@ -71,12 +68,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (cheatPingBtn) cheatPingBtn.classList.remove('hidden');
             }
 
-            // 2. Emit socket join if socket exists
             if (socket) {
                 socket.emit('join-room', { roomCode, playerName, role: myRole, cheatUnlocked });
             }
 
-            // 3. Initialize map
             setTimeout(() => {
                 try {
                     initMap();
