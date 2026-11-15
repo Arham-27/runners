@@ -151,17 +151,28 @@ document.addEventListener('DOMContentLoaded', () => {
                 seekersList.appendChild(li);
             }
 
+            // Stealth Logic: Teammates see each other live, opposing players are hidden from map
             if (map && !isMe) {
-                if (!markers[id]) {
-                    markers[id] = L.circleMarker([p.lat, p.lng], {
-                        radius: 8,
-                        fillColor: color,
-                        color: '#fff',
-                        weight: 1,
-                        fillOpacity: 0.8
-                    }).addTo(map).bindPopup(`${p.name.toUpperCase()} (${p.role})`);
+                const isTeammate = (p.role === myRole);
+
+                if (isTeammate) {
+                    if (!markers[id]) {
+                        markers[id] = L.circleMarker([p.lat, p.lng], {
+                            radius: 8,
+                            fillColor: color,
+                            color: '#fff',
+                            weight: 1,
+                            fillOpacity: 0.8
+                        }).addTo(map).bindPopup(`${p.name.toUpperCase()} (${p.role})`);
+                    } else {
+                        markers[id].setLatLng([p.lat, p.lng]);
+                    }
                 } else {
-                    markers[id].setLatLng([p.lat, p.lng]);
+                    // Remove opponent marker so they remain hidden
+                    if (markers[id]) {
+                        map.removeLayer(markers[id]);
+                        delete markers[id];
+                    }
                 }
             }
         }
