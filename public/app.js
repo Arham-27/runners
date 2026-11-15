@@ -137,6 +137,26 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    function playBeep() {
+        try {
+            const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            const oscillator = audioCtx.createOscillator();
+            const gainNode = audioCtx.createGain();
+            
+            oscillator.type = 'sine';
+            oscillator.frequency.setValueAtTime(880, audioCtx.currentTime);
+            gainNode.gain.setValueAtTime(0.2, audioCtx.currentTime);
+            
+            oscillator.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+            
+            oscillator.start();
+            oscillator.stop(audioCtx.currentTime + 0.3);
+        } catch (e) {
+            console.log("Audio restricted:", e);
+        }
+    }
+
     if (socket) {
         socket.on('update-players', (players) => {
             playersData = players;
@@ -201,11 +221,29 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
 
+        // FIXED: Added back the red ping circle rendering on the map for Seekers / Cheat users
         socket.on('runner-ping', ({ lat, lng, message }) => {
             if (alertBanner) {
                 alertBanner.textContent = message;
                 alertBanner.classList.remove('hidden');
                 setTimeout(() => alertBanner.classList.add('hidden'), 5000);
+            }
+
+            if (myRole === 'runner') {
+                playBeep();
+            } else if (myRole === 'seeker' || cheatUnlocked) {
+                if (!map) return;
+                const pingCircle = L.circle([lat, lng], {
+                    color: 'red',
+                    fillColor: '#da3633',
+                    fillOpacity: 0.5,
+                    radius: 40
+                }).addTo(map);
+
+                // Remove the red ping circle after 30 seconds
+                setTimeout(() => {
+                    map.removeLayer(pingCircle);
+                }, 30000);
             }
         });
 
